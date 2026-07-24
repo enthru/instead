@@ -110,6 +110,33 @@ if [ -z "$NO_BUNDLE" ] && command -v dylibbundler >/dev/null; then
         -x ./MacOS/instead \
         -d ./Frameworks/ \
         -p @executable_path/../Frameworks/ )
+
+    # Homebrew's "sdl2" is nowadays sdl2-compat: a shim that dlopen's SDL3 at
+    # runtime (e.g. @loader_path/libSDL3.dylib). dylibbundler cannot see dlopen'd
+    # libraries, so bundle SDL3 next to libSDL2 by hand, otherwise the app fails
+    # with "failed to load sdl library" outside the build environment.
+    COMPAT="$APP/Contents/Frameworks/libSDL2-2.0.0.dylib"
+    if [ -f "$COMPAT" ] && strings "$COMPAT" 2>/dev/null | grep -q 'libSDL3'; then
+        SDL3=""
+        for p in "$(brew --prefix sdl3 2>/dev/null)/lib" /opt/homebrew/lib /usr/local/lib; do
+            [ -e "$p/libSDL3.dylib" ] && { SDL3="$p/libSDL3.dylib"; break; }
+        done
+        if [ -n "$SDL3" ]; then
+            echo ">> Bundling SDL3 (dlopen'd by sdl2-compat)"
+            cp "$SDL3" "$APP/Contents/Frameworks/libSDL3.dylib"   # cp follows the symlink
+            chmod +w "$APP/Contents/Frameworks/libSDL3.dylib"
+            install_name_tool -id @loader_path/libSDL3.dylib \
+                "$APP/Contents/Frameworks/libSDL3.dylib" 2>/dev/null || true
+            # pull in SDL3's own non-system deps too (usually none)
+            ( cd "$APP/Contents" && dylibbundler -of -b \
+                -x ./Frameworks/libSDL3.dylib \
+                -d ./Frameworks/ \
+                -p @loader_path/ >/dev/null 2>&1 ) || true
+        else
+            echo "!! sdl2-compat detected but libSDL3.dylib not found;"
+            echo "   install it with: brew install sdl3"
+        fi
+    fi
 elif [ -z "$NO_BUNDLE" ]; then
     echo "!! dylibbundler not found: bundle will rely on Homebrew libs at /opt/homebrew."
     echo "   Install it (brew install dylibbundler) for a portable .app, or set NO_BUNDLE=1."

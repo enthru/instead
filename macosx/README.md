@@ -72,6 +72,14 @@ brew install dylibbundler   # optional, needed for a portable .app
    Homebrew. Skip this step with `NO_BUNDLE=1` (the bundle then depends on the
    Homebrew libraries under `/opt/homebrew`).
 
+   Homebrew's `sdl2` formula is now **sdl2-compat**, a shim that `dlopen`s
+   **SDL3** at runtime. `dylibbundler` cannot follow `dlopen`, so the script
+   additionally copies `libSDL3.dylib` next to `libSDL2` inside `Frameworks/`
+   (resolving `@loader_path/libSDL3.dylib`). Without this the app aborts with
+   *"failed to load sdl library"* when launched outside the build environment
+   (e.g. by double-clicking in Finder). This needs `brew install sdl3` (pulled
+   in automatically as a dependency of `sdl2`).
+
 5. **Ad-hoc code sign** the finished bundle (`codesign --deep --sign -`).
 
 ## Options
