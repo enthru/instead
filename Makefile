@@ -11,6 +11,9 @@ all:
 		$(MAKE) -C $$dir $(@) || exit 1; \
 	done;
 
+app:
+	sh macosx/make_app.sh
+
 Rules.make:
 	ln -sf Rules.make.standalone Rules.make
 
