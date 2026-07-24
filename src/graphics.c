@@ -2250,6 +2250,21 @@ retry:
 #endif
 	if (!nocursor_sw)
 		SDL_ShowCursor(SDL_DISABLE);
+#if defined(__APPLE__) && !defined(IOS)
+	/* On macOS with SDL3/sdl2-compat the system cursor keeps being drawn even
+	 * after SDL_ShowCursor(SDL_DISABLE) (query reports it hidden, but it isn't),
+	 * so it shows up on top of INSTEAD's own themed cursor. Force a fully
+	 * transparent cursor as well, which is invisible regardless. */
+	if (!nocursor_sw) {
+		static SDL_Cursor *blank_cursor = NULL;
+		if (!blank_cursor) {
+			Uint8 blank[8] = { 0 };
+			blank_cursor = SDL_CreateCursor(blank, blank, 8, 8, 0, 0);
+		}
+		if (blank_cursor)
+			SDL_SetCursor(blank_cursor);
+	}
+#endif
 
 	gfx_fs = fs;
 	gfx_width = w;
