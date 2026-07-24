@@ -2178,26 +2178,22 @@ int gfx_set_mode(int w, int h, int fs)
 	if (icon)
 		SDL_SetWindowIcon(SDL_VideoWindow, icon);
 
-#if defined(__APPLE__) && !defined(IOS)
-	/* On a Retina display SDL_WINDOW_ALLOW_HIGHDPI gives us a backing store
-	 * larger than the requested (point) size. The theme was already rendered at
-	 * the high-dpi resolution (win_w/win_h are in pixels here), so shrink the
-	 * window to point size == pixels / backing_scale. This maps the content 1:1
-	 * onto the drawable (sharp) and makes the window physically the right size
-	 * (e.g. half as big on a 2x display) instead of oversized and blurry. */
-	if (!fs && SDL_VideoWindow) {
-		int dw = win_w, dh = win_h;
-		SDL_GL_GetDrawableSize(SDL_VideoWindow, &dw, &dh);
-		if (dw > win_w && dh > win_h) {
-			SDL_SetWindowSize(SDL_VideoWindow,
-				(int)((float)win_w * win_w / dw),
-				(int)((float)win_h * win_h / dh));
-			if (window_x == SDL_WINDOWPOS_UNDEFINED || window_x == 0)
-				SDL_SetWindowPosition(SDL_VideoWindow,
-					SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	/* Never let a windowed window spill past the usable desktop area: the mode
+	 * list on HiDPI displays is reported in pixels but the window size is in
+	 * points, so the largest modes come out taller/wider than the screen. Shrink
+	 * (preserving aspect) only when it does not fit; smaller modes are left as-is. */
+	if (!fs && SDL_VideoWindow && win_w > 0 && win_h > 0) {
+		int avail_w = desktop_mode.w;
+		int avail_h = desktop_mode.h - 64; /* room for menu bar + title bar */
+		if (win_w > avail_w || win_h > avail_h) {
+			float s_w = (float)avail_w / (float)win_w;
+			float s_h = (float)avail_h / (float)win_h;
+			float s = (s_w < s_h) ? s_w : s_h;
+			SDL_SetWindowSize(SDL_VideoWindow, (int)(win_w * s), (int)(win_h * s));
+			SDL_SetWindowPosition(SDL_VideoWindow,
+				SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 		}
 	}
-#endif
 
 	if (SDL_SetWindowDisplayMode(SDL_VideoWindow, (fs)?NULL:&desktop_mode) < 0) {
 		fprintf(stderr, "Unable to set display mode: %s\n", SDL_GetError());

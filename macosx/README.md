@@ -24,6 +24,20 @@ open build/INSTEAD.app
 `make app` is a thin wrapper around `macosx/make_app.sh`; you can also run the
 script directly.
 
+## Installing (required for instead-launcher)
+
+`instead-launcher` runs the engine from **`/Applications/INSTEAD.app`**, so after
+rebuilding you must install the fresh bundle there — otherwise the launcher keeps
+using the old engine and your changes never take effect:
+
+```sh
+rm -rf /Applications/INSTEAD.app
+cp -R build/INSTEAD.app /Applications/INSTEAD.app
+```
+
+Note: `open` only *focuses* an already-running instance; it does not relaunch a
+rebuilt binary. Quit the running game/engine before testing a new build.
+
 ## Requirements
 
 Install the toolchain and libraries with [Homebrew](https://brew.sh):
