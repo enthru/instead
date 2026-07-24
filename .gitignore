@@ -1,0 +1,10 @@
+# Claude Code artifacts
+.claude/
+
+# Build output
+/build/
+*.o
+*.a
+
+# macOS
+.DS_Store
