@@ -2055,6 +2055,14 @@ void unlock_rotation(void)
 }
 #endif
 
+/* On macOS (Retina) create a HighDPI-aware window so the renderer draws into
+ * the full-resolution backing store instead of being upscaled (blurry). */
+#if defined(__APPLE__) && !defined(IOS)
+#define GFX_HIGHDPI SDL_WINDOW_ALLOW_HIGHDPI
+#else
+#define GFX_HIGHDPI 0
+#endif
+
 int gfx_set_mode(int w, int h, int fs)
 {
 	int i;
@@ -2155,7 +2163,7 @@ int gfx_set_mode(int w, int h, int fs)
 #else
 	if (!software_sw) /* try to using scale */
 		SDL_VideoWindow = SDL_CreateWindow(t, window_x, window_y, win_w, win_h,
-			SDL_WINDOW_SHOWN | ((fs)?SDL_WINDOW_FULLSCREEN:(resizable_sw?SDL_WINDOW_RESIZABLE:0)) | SDL_WINDOW_OPENGL);
+			SDL_WINDOW_SHOWN | ((fs)?SDL_WINDOW_FULLSCREEN:(resizable_sw?SDL_WINDOW_RESIZABLE:0)) | SDL_WINDOW_OPENGL | GFX_HIGHDPI);
 	if (!SDL_VideoWindow) { /* try simple window */
 		fprintf(stderr, "Fallback to software window.\n");
 		win_w = w; win_h = h;
@@ -2169,6 +2177,27 @@ int gfx_set_mode(int w, int h, int fs)
 	}
 	if (icon)
 		SDL_SetWindowIcon(SDL_VideoWindow, icon);
+
+#if defined(__APPLE__) && !defined(IOS)
+	/* On a Retina display SDL_WINDOW_ALLOW_HIGHDPI gives us a backing store
+	 * larger than the requested (point) size. The theme was already rendered at
+	 * the high-dpi resolution (win_w/win_h are in pixels here), so shrink the
+	 * window to point size == pixels / backing_scale. This maps the content 1:1
+	 * onto the drawable (sharp) and makes the window physically the right size
+	 * (e.g. half as big on a 2x display) instead of oversized and blurry. */
+	if (!fs && SDL_VideoWindow) {
+		int dw = win_w, dh = win_h;
+		SDL_GL_GetDrawableSize(SDL_VideoWindow, &dw, &dh);
+		if (dw > win_w && dh > win_h) {
+			SDL_SetWindowSize(SDL_VideoWindow,
+				(int)((float)win_w * win_w / dw),
+				(int)((float)win_h * win_h / dh));
+			if (window_x == SDL_WINDOWPOS_UNDEFINED || window_x == 0)
+				SDL_SetWindowPosition(SDL_VideoWindow,
+					SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+		}
+	}
+#endif
 
 	if (SDL_SetWindowDisplayMode(SDL_VideoWindow, (fs)?NULL:&desktop_mode) < 0) {
 		fprintf(stderr, "Unable to set display mode: %s\n", SDL_GetError());
