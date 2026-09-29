@@ -106,6 +106,11 @@ static void touch_mouse_event(SDL_Event *sevent)
 		return; /* not a finger event (e.g. SDL_MULTIGESTURE) */
 	}
 #if defined(__vita__)
+	/* Vita has two touch panels: front (device 0) and rear (device 1).
+	 * Only the front panel should drive the pointer. */
+	if (SDL_GetNumTouchDevices() > 1 &&
+	    sevent->tfinger.touchId != SDL_GetTouchDevice(0))
+		return;
 	/* tfinger.x/y are normalized [0,1]; map to game pixels, viewport-aware
 	 * so the letterbox offset of the fullscreen render is accounted for. */
 	{
@@ -131,7 +136,7 @@ extern void gfx_finger_pos_scale(float x, float y, int *ox, int *oy, int norm);
 #define INPUT_REP_DELAY_MS 500
 #define INPUT_REP_INTERVAL_MS 30
 
-#define GAMEPAD_TICKS 20
+#define GAMEPAD_TICKS 16
 
 #if defined(IOS) || defined(ANDROID)
 int HandleAppEvents(void *userdata, SDL_Event *event)
@@ -189,9 +194,11 @@ int HandleAppEvents(void *userdata, SDL_Event *event)
 static gtimer_t gamepad_timer = NULL_TIMER;
 static SDL_GameController *gamepad = NULL;
 static int deadzone = 8192;
+static float gp_accum_x = 0.0f; /* sub-pixel pointer movement carry */
+static float gp_accum_y = 0.0f;
 
-const float MOUSE_SHIFT_MIN = 1.0;
-const float MOUSE_SHIFT_MAX = 10.0;
+const float MOUSE_SHIFT_MIN = 0.0;
+const float MOUSE_SHIFT_MAX = 12.0;
 
 static int gamepad_deadzone(SDL_GameController *g)
 {
@@ -218,15 +225,17 @@ static int gamepad_deadzone(SDL_GameController *g)
 #endif
 }
 
-static int gamepad_mouse_shift(int axis_value) {
-	float range;
+static float gamepad_mouse_shift(int axis_value) {
+	float t, range, sign;
 	if (abs(axis_value) < deadzone)
 		return 0;
 	range = 32768.0 - deadzone;
-	if (axis_value > deadzone)
-		return MOUSE_SHIFT_MIN + (MOUSE_SHIFT_MAX - MOUSE_SHIFT_MIN) * (axis_value - deadzone) / range;
-	else
-		return -MOUSE_SHIFT_MIN + (MOUSE_SHIFT_MAX - MOUSE_SHIFT_MIN) * (axis_value + deadzone) / range;
+	sign = (axis_value > 0) ? 1.0f : -1.0f;
+	t = (abs(axis_value) - deadzone) / range; /* 0..1 */
+	/* Quadratic response: fine, slow control near the centre and fast
+	 * travel towards the edge. Combined with fractional accumulation in
+	 * gamepad_timer_fn this gives smooth, precise pointer control. */
+	return sign * (MOUSE_SHIFT_MIN + (MOUSE_SHIFT_MAX - MOUSE_SHIFT_MIN) * t * t);
 }
 
 static void gamepad_init(void)
@@ -302,13 +311,27 @@ static int gamepad_timer_fn(int interval, void *p)
 	}
 
 	if (abs(axis_x) > deadzone || abs(axis_y) > deadzone) {
-		memset(&event, 0, sizeof(event));
-		event.type = SDL_MOUSEMOTION;
-		gfx_cursor(&event.button.x, &event.button.y);
-		event.button.x += ceil(game_theme.scale * gamepad_mouse_shift(axis_x));
-		event.button.y += ceil(game_theme.scale * gamepad_mouse_shift(axis_y));
-		gfx_warp_cursor(event.button.x, event.button.y);
-		SDL_PushEvent(&event);
+		int dx, dy, cx = 0, cy = 0;
+		/* Accumulate sub-pixel movement so slow stick deflection still
+		 * moves the pointer smoothly instead of snapping in 1px steps. */
+		gp_accum_x += game_theme.scale * gamepad_mouse_shift(axis_x);
+		gp_accum_y += game_theme.scale * gamepad_mouse_shift(axis_y);
+		dx = (int)gp_accum_x;
+		dy = (int)gp_accum_y;
+		if (dx || dy) {
+			gp_accum_x -= dx;
+			gp_accum_y -= dy;
+			memset(&event, 0, sizeof(event));
+			event.type = SDL_MOUSEMOTION;
+			gfx_cursor(&cx, &cy);
+			event.button.x = cx + dx;
+			event.button.y = cy + dy;
+			gfx_warp_cursor(event.button.x, event.button.y);
+			SDL_PushEvent(&event);
+		}
+	} else {
+		gp_accum_x = 0;
+		gp_accum_y = 0;
 	}
 	return interval;
 }
