@@ -198,7 +198,7 @@ static float gp_accum_x = 0.0f; /* sub-pixel pointer movement carry */
 static float gp_accum_y = 0.0f;
 
 const float MOUSE_SHIFT_MIN = 0.0;
-const float MOUSE_SHIFT_MAX = 12.0;
+const float MOUSE_SHIFT_MAX = 6.0;
 
 static int gamepad_deadzone(SDL_GameController *g)
 {
