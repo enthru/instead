@@ -5,23 +5,23 @@ This directory builds INSTEAD as a PlayStation Vita homebrew package
 
 ## Building
 
-The build needs the VitaSDK toolchain (`arm-vita-eabi-*` and the `vita-*`
-packaging tools on `PATH`, `$VITASDK` set) together with the SDL2 stack, LuaJIT,
-zlib and freetype vdpm packages. All of that already ships in the official
-Docker image, which is the simplest route on macOS/Windows:
+From the repo root:
 
 ```sh
-docker run --rm -v "$PWD":/project vitasdk/vitasdk:latest \
-       sh /project/contrib/vita/build.sh
+make vita
 ```
 
 Output: `build-vita/INSTEAD.vpk`.
 
-If you have a native VitaSDK install, just run the script from the repo root:
+The build needs the VitaSDK toolchain (`arm-vita-eabi-*` and the `vita-*`
+packaging tools on `PATH`, `$VITASDK` set) together with the SDL2 stack, LuaJIT,
+zlib and freetype vdpm packages. If a native VitaSDK is not on `PATH`,
+`make vita` transparently runs the whole build inside the official
+`vitasdk/vitasdk` Docker image (the usual case on macOS/Windows), so only Docker
+is required there.
 
-```sh
-sh contrib/vita/build.sh
-```
+`make vita` just calls `contrib/vita/build.sh`; you can run that script directly
+too, with the same behaviour.
 
 ## Installing
 

@@ -17,6 +17,18 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 cd "$ROOT"
 
+# If we are not already inside a VitaSDK environment, re-run the whole build
+# inside the official Docker image (this is the usual case on macOS/Windows).
+if ! command -v arm-vita-eabi-gcc >/dev/null 2>&1; then
+	if command -v docker >/dev/null 2>&1; then
+		echo ">> no VitaSDK on PATH, building via vitasdk/vitasdk Docker image"
+		exec docker run --rm -v "$ROOT":/project vitasdk/vitasdk:latest \
+			sh /project/contrib/vita/build.sh
+	fi
+	echo "error: need the VitaSDK toolchain (arm-vita-eabi-gcc) or Docker" >&2
+	exit 1
+fi
+
 VERSION=$(grep 'SET(INSTEAD_VERSION' CMakeLists.txt | sed 's/[^0-9.]//g')
 [ -n "$VERSION" ] || VERSION=3.5.2
 

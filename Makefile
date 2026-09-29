@@ -14,6 +14,9 @@ all:
 app:
 	sh macosx/make_app.sh
 
+vita:
+	sh contrib/vita/build.sh
+
 Rules.make:
 	ln -sf Rules.make.standalone Rules.make
 
