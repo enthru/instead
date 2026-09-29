@@ -71,6 +71,9 @@ extern void 	gfx_done(void);
 extern int	gfx_parse_color (const char *spec, color_t *def);
 extern void	gfx_flip(void);
 extern void	gfx_commit(void);
+#ifdef __vita__
+extern void	gfx_cursor_dirty(void);
+#endif
 
 extern cache_t	gfx_image_cache(void);
 extern img_t	gfx_screen(img_t nscreen);
@@ -239,6 +242,7 @@ extern void	gfx_dispose_anim(img_t p);
 extern unsigned long gfx_ticks(void);
 
 extern void	gfx_set_cursor(img_t cur, int xc, int yc);
+extern void	gfx_show_cursor(int on);
 extern int	gfx_pending(void);
 extern float	gfx_get_dpi(void);
 

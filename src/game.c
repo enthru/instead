@@ -2676,6 +2676,19 @@ void game_cursor(int on)
 	static img_t 	cur = NULL;
 	static int xc = 0, yc = 0, w = 0, h = 0; /*, w, h; */
 	int xx, yy, ww, hh;
+#ifdef __vita__
+	/* On Vita the cursor is drawn as a GPU overlay in SDL_Flip, not
+	 * composited into the software surface (that would force a full-texture
+	 * re-upload every move, ~90ms on vitaGL). Here we only track visibility
+	 * and request a present. */
+	(void)grab; (void)cur; (void)xc; (void)yc; (void)w; (void)h;
+	if (on == CURSOR_OFF)
+		gfx_show_cursor(0);
+	else if (on == CURSOR_ON || on == CURSOR_DRAW)
+		gfx_show_cursor(!nocursor_sw && (game_cursor_show || menu_shown));
+	gfx_cursor_dirty();
+	return;
+#endif
 	gfx_getclip(&xx, &yy, &ww, &hh);
 	gfx_noclip();
 	if (on == CURSOR_OFF)
@@ -3636,7 +3649,20 @@ static __inline int game_cycle(void)
 	}
 	rc = 0;
 out:
+#ifdef __vita__
+	/* gfx_flip() marks the whole screen dirty, forcing a full-screen
+	 * SDL_UpdateTexture every event (~125ms on vitaGL -> ~8 fps). The cursor,
+	 * xref highlight and scene redraws already mark their own regions, so for
+	 * ordinary (non render-callback) frames skip the blanket flip and let the
+	 * partial dirty rects drive a tiny upload. Keep the full flip while a Lua
+	 * render callback is driving the frame. */
+	if (instead_render_callback_dirty(-1) != 0)
+		game_flip();
+	else
+		instead_render_callback();
+#else
 	game_flip();
+#endif
 	game_gfx_commit(rc < 0);
 	if (rc < 0)
 		game_render_callback_redraw();

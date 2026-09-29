@@ -2315,6 +2315,13 @@ static int queue_y1 = -1;
 static int queue_x2 = -1;
 static int queue_y2 = -1;
 static int queue_dirty = 0;
+#ifdef __vita__
+static int cursor_dirty = 0; /* cursor overlay needs a present, no upload */
+void gfx_cursor_dirty(void)
+{
+	cursor_dirty = 1;
+}
+#endif
 static SDL_Texture *cursor = NULL;
 
 
@@ -2430,6 +2437,27 @@ int SDL_Flip(SDL_Surface * screen)
 	pitch = screen->pitch;
 	psize = screen->format->BytesPerPixel;
 	pixels = screen->pixels;
+#ifdef __vita__
+	/* On vitaGL, SDL_UpdateTexture re-converts the whole texture (~90ms)
+	 * regardless of the sub-rect, so uploading the scene on every cursor move
+	 * kills the frame rate. Upload the scene texture only when the scene
+	 * actually changed, and draw the cursor as a cheap GPU overlay on top.
+	 * A cursor-only move then costs just a RenderCopy + present. */
+	if (queue_dirty || cursor_dirty) {
+		if (queue_dirty) {
+			rect.x = queue_x1;
+			rect.y = queue_y1;
+			rect.w = queue_x2 - queue_x1;
+			rect.h = queue_y2 - queue_y1;
+			SDL_UpdateTexture(SDL_VideoTexture, &rect,
+				pixels + pitch * queue_y1 + queue_x1 * psize, pitch);
+		}
+		gfx_render_copy(SDL_VideoTexture, NULL, 1); /* clear + full copy */
+		gfx_render_cursor(); /* GPU overlay, no texture upload */
+		SDL_RenderPresent(Renderer);
+	}
+	cursor_dirty = 0;
+#else
 	if (queue_dirty) {
 		rect.x = queue_x1;
 		rect.y = queue_y1;
@@ -2440,22 +2468,8 @@ int SDL_Flip(SDL_Surface * screen)
 		SDL_UpdateTexture(SDL_VideoTexture, &rect, pixels, pitch);
 		gfx_render_copy(SDL_VideoTexture, &rect, 1);
 		SDL_RenderPresent(Renderer);
-#ifdef __vita__
-		{ /* rough FPS meter: presents per second, logged to stderr */
-			static Uint32 fps_t0 = 0;
-			static int fps_n = 0;
-			Uint32 now = SDL_GetTicks();
-			if (!fps_t0)
-				fps_t0 = now;
-			fps_n++;
-			if (now - fps_t0 >= 1000) {
-				fprintf(stderr, "FPS: %d\n", fps_n);
-				fps_n = 0;
-				fps_t0 = now;
-			}
-		}
-#endif
 	}
+#endif
 	queue_x1 = queue_y1 = queue_x2 = queue_y2 = -1;
 	queue_dirty = 0;
 	return 0;
@@ -5641,7 +5655,9 @@ static void update_gfx(void)
 	img_t img = fade_fg;
 	if (fade_step_nr == -1 || !img || !fade_bg || !fade_fg)
 		return;
-	gfx_render_copy(fade_bg_texture, NULL, 1);
+	/* On Vita fade_bg_texture is NULL: the old scene is still in the video
+	 * texture, so use it as the fade background (see gfx_change_screen). */
+	gfx_render_copy(fade_bg_texture ? fade_bg_texture : SDL_VideoTexture, NULL, 1);
 	SDL_SetTextureAlphaMod(fade_fg_texture, (SDL_ALPHA_OPAQUE * (fade_step_nr + 1)) / ALPHA_STEPS);
 	gfx_render_copy(fade_fg_texture, NULL, 0);
 	if (game_cursor_show)
@@ -5719,11 +5735,19 @@ void gfx_change_screen(img_t src, int steps, void (*callback)(void *), void *aux
 
 	fade_fg = src;
 
+#ifdef __vita__
+	/* The old scene is already resident in SDL_VideoTexture, so reuse it as
+	 * the fade background instead of uploading a second full-screen texture
+	 * (~90ms on vitaGL). update_gfx() copies SDL_VideoTexture when
+	 * fade_bg_texture is NULL. */
+	fade_bg_texture = NULL;
+#else
 	fade_bg_texture = SDL_CreateTextureFromSurface(Renderer, Surf(fade_bg));
 	if (!fade_bg_texture)
 		goto err;
 	SDL_SetTextureAlphaMod(fade_bg_texture, SDL_ALPHA_OPAQUE);
 	SDL_SetTextureBlendMode(fade_bg_texture, SDL_BLENDMODE_NONE);
+#endif
 	fade_fg_texture = SDL_CreateTextureFromSurface(Renderer, Surf(src));
 	if (!fade_fg_texture)
 		goto err2;
@@ -5798,7 +5822,11 @@ unsigned long gfx_ticks(void)
 
 int gfx_pending(void)
 {
+#ifdef __vita__
+	return queue_dirty || cursor_dirty;
+#else
 	return queue_dirty;
+#endif
 }
 
 int gfx_set_title(const char *title)
