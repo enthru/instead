@@ -312,10 +312,16 @@ static int gamepad_timer_fn(int interval, void *p)
 
 	if (abs(axis_x) > deadzone || abs(axis_y) > deadzone) {
 		int dx, dy, cx = 0, cy = 0;
+		float sy = game_theme.scale;
+		/* The screen is wider than tall, so an equal px/s speed feels much
+		 * faster vertically (the pointer crosses the shorter axis sooner).
+		 * Damp Y by the aspect ratio so both axes feel equally sensitive. */
+		if (gfx_width > 0 && gfx_height > 0 && gfx_height < gfx_width)
+			sy *= (float)gfx_height / (float)gfx_width;
 		/* Accumulate sub-pixel movement so slow stick deflection still
 		 * moves the pointer smoothly instead of snapping in 1px steps. */
 		gp_accum_x += game_theme.scale * gamepad_mouse_shift(axis_x);
-		gp_accum_y += game_theme.scale * gamepad_mouse_shift(axis_y);
+		gp_accum_y += sy * gamepad_mouse_shift(axis_y);
 		dx = (int)gp_accum_x;
 		dy = (int)gp_accum_y;
 		if (dx || dy) {
