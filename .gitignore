@@ -3,6 +3,7 @@
 
 # Build output
 /build/
+/build-vita/
 *.o
 *.a
 

@@ -491,7 +491,7 @@ char *getdir(char *path, size_t size)
 char *dirpath(const char *path)
 {
 	static char fp[PATH_MAX * 4];
-	if (path[0] == '/')
+	if (is_absolute_path(path))
 		return (char*)path;
 	snprintf(fp, sizeof(fp), "%s/%s", curdir, path);
 	fp[sizeof(fp) - 1] = 0;
@@ -504,6 +504,16 @@ int is_absolute_path(const char *path)
 {
 	if (!path || !*path)
 		return 0;
+#ifdef __vita__
+	/* PS Vita paths are drive-prefixed, e.g. "app0:/..", "ux0:data/..".
+	 * Treat a "drive:" prefix (a ':' before any '/') as absolute. */
+	{
+		const char *colon = strchr(path, ':');
+		const char *slash = strchr(path, '/');
+		if (colon && (!slash || colon < slash))
+			return 1;
+	}
+#endif
 	return (*path == '/');
 }
 
@@ -638,10 +648,11 @@ loop:
 		    q - path);
 		p[1 + q - path] = '\0';
 	}
-#if defined(unix)
+#if defined(unix) && !defined(__vita__)
 	/*
 	 * If this component is a symlink, toss it and prepend link
 	 * target to unresolved path.
+	 * PS Vita (newlib) has no symlinks / readlink / lstat.
 	 */
 	if (lstat(resolved, &sb) != -1 && S_ISLNK(sb.st_mode)) {
 		if (nlnk++ >= 16) {

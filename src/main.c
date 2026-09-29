@@ -349,6 +349,10 @@ int instead_main(int argc, char *argv[])
 		free(exe_path);
 	} else /* Sorry, kernel mode programming practice. Useless here. */
 		strcpy(game_cwd, dirname(argv[0]));
+#elif defined(__vita__)
+	/* Read-only app data is bundled in the vpk at app0:/ */
+	chdir("app0:/");
+	strcpy(game_cwd, "app0:");
 #else
 	if (!getcwd(game_cwd, sizeof(game_cwd)))
 		fprintf(stderr,"Warning: can not get current dir\n.");

@@ -42,6 +42,11 @@
 #include <gtk/gtk.h>
 #endif
 
+#ifdef __vita__
+/* Writable application data root on the memory card. */
+#define VITA_APPDATA "ux0:data/instead"
+#endif
+
 static char save_path[PATH_MAX];
 static char cfg_path[PATH_MAX];
 static char local_games_path[PATH_MAX];
@@ -63,11 +68,19 @@ char *game_locale(void)
 char *game_tmp_path(void)
 {
 	static time_t t = 0;
+#ifdef __vita__
+	static char tmp[PATH_MAX] = VITA_APPDATA "/tmp";
+	if (!t) {
+		t = time(NULL);
+		sprintf(tmp, VITA_APPDATA "/tmp-%lu", (unsigned long)t);
+	}
+#else
 	static char tmp[PATH_MAX]="/tmp/instead-games";
 	if (!t) {
 		t = time(NULL);
 		sprintf(tmp, "/tmp/instead-games-%lu", (unsigned long)t);
 	}
+#endif
 	if (mkdir(tmp, S_IRWXU) && errno != EEXIST)
 		return NULL;
 	return tmp;
@@ -240,6 +253,17 @@ char *open_file_dialog(void)
 char *appdir(void)
 {
 	static char dir[PATH_MAX] = "";
+#ifdef __vita__
+	if (appdata_sw && appdata_sw[0])
+		strcpy(dir, appdata_sw);
+	else
+		strcpy(dir, VITA_APPDATA);
+	mkdir("ux0:data", S_IRWXU); /* ensure parent exists, ignore EEXIST */
+	if (mkdir(dir, S_IRWXU) && errno != EEXIST)
+		return NULL;
+	return dir;
+}
+#else
 	struct passwd *pw;
 #ifdef _LOCAL_APPDATA
 	if (!appdata_sw) {
@@ -257,6 +281,7 @@ char *appdir(void)
 	snprintf(dir, sizeof(dir) - 1 , "%s/.instead", pw->pw_dir);
 	return dir;
 }
+#endif /* __vita__ */
 
 char *game_local_games_path(int cr)
 {
@@ -297,7 +322,9 @@ char *instead_local_stead_path(void)
 char *game_cfg_path(void)
 {
 	char *app = appdir();
+#ifndef __vita__
 	struct passwd *pw;
+#endif
 	if (app) {
 		snprintf(cfg_path, sizeof(cfg_path) - 1 , "%s/", app);
 		if (mkdir(cfg_path, S_IRWXU) == 0 || errno == EEXIST) {
@@ -305,13 +332,16 @@ char *game_cfg_path(void)
 			return cfg_path;
 		}
 	}
-
+#ifdef __vita__
+	return NULL;
+#else
 	pw = getpwuid(getuid());
-	if (!pw) 
+	if (!pw)
 		return NULL;
 
 	snprintf(cfg_path, sizeof(cfg_path) - 1 , "%s/.insteadrc", pw->pw_dir); /* at home */
 	return cfg_path;
+#endif
 }
 
 char *game_save_path(int cr, int nr)
