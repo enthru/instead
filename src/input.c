@@ -330,9 +330,18 @@ static int gamepad_timer_fn(int interval, void *p)
 			memset(&event, 0, sizeof(event));
 			event.type = SDL_MOUSEMOTION;
 			gfx_cursor(&cx, &cy);
-			event.button.x = cx + dx;
-			event.button.y = cy + dy;
-			gfx_warp_cursor(event.button.x, event.button.y);
+			cx += dx;
+			cy += dy;
+			/* Clamp to the screen. Unlike the desktop, warping the pointer
+			 * on Vita produces no corrective motion event, so without this
+			 * the position accumulates unbounded and the cursor flies off. */
+			if (cx < 0) cx = 0;
+			else if (cx >= gfx_width) cx = gfx_width - 1;
+			if (cy < 0) cy = 0;
+			else if (cy >= gfx_height) cy = gfx_height - 1;
+			event.button.x = cx;
+			event.button.y = cy;
+			gfx_warp_cursor(cx, cy);
 			SDL_PushEvent(&event);
 		}
 	} else {
