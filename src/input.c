@@ -83,7 +83,9 @@ int system_clipboard(const char *text, char **buf)
 	return SDL_SetClipboardText(text);
 }
 
-#ifdef SAILFISHOS
+extern void gfx_finger_pos_scale(float x, float y, int *ox, int *oy, int norm);
+
+#if defined(SAILFISHOS) || defined(__vita__)
 static SDL_FingerID finger_mouse = 0;
 
 static void touch_mouse_event(SDL_Event *sevent)
@@ -100,9 +102,22 @@ static void touch_mouse_event(SDL_Event *sevent)
 		if (sevent->tfinger.fingerId != finger_mouse)
 			return;
 		event.type = SDL_MOUSEMOTION;
+	} else {
+		return; /* not a finger event (e.g. SDL_MULTIGESTURE) */
 	}
+#if defined(__vita__)
+	/* tfinger.x/y are normalized [0,1]; map to game pixels, viewport-aware
+	 * so the letterbox offset of the fullscreen render is accounted for. */
+	{
+		int x = 0, y = 0;
+		gfx_finger_pos_scale(sevent->tfinger.x, sevent->tfinger.y, &x, &y, 1);
+		event.button.x = x;
+		event.button.y = y;
+	}
+#else
 	event.button.x = sevent->tfinger.x;
 	event.button.y = sevent->tfinger.y;
+#endif
 	event.button.clicks = 1;
 	event.button.button = 1;
 	SDL_PushEvent(&event);
@@ -492,7 +507,7 @@ int input(struct inp_event *inp, int wait)
 			return AGAIN;
 		if (SDL_PeepEvents(&peek, 1, SDL_PEEKEVENT, event.type, event.type) > 0)
 			return AGAIN; /* to avoid flickering */
-#if defined(SAILFISHOS)
+#if defined(SAILFISHOS) || defined(__vita__)
 		touch_mouse_event(&event);
 #endif
 		break;
@@ -501,7 +516,7 @@ int input(struct inp_event *inp, int wait)
 		touch_num = 0;
 #endif
 	case SDL_FINGERDOWN:
-#if defined(SAILFISHOS)
+#if defined(SAILFISHOS) || defined(__vita__)
 		touch_mouse_event(&event);
 #endif
 #if defined(IOS) || defined(SAILFISHOS)
