@@ -89,6 +89,27 @@ void game_res_err_msg(const char *filename, int alert)
 	fprintf(stderr, "%s%s\n", preambule, filename);
 }
 
+#ifdef _USE_UNPACK
+extern char zip_game_dirname[];
+extern int unpack(const char *zipfilename, const char *dirname);
+
+#define GAME_ZIP 4 /* is_game(): an unopened .zip archive */
+
+static int game_unzip(struct game *g);
+
+static int has_zip_ext(const char *n)
+{
+	size_t l = n ? strlen(n) : 0;
+	if (l < 4)
+		return 0;
+	n += l - 4;
+	return n[0] == '.' &&
+		(n[1] == 'z' || n[1] == 'Z') &&
+		(n[2] == 'i' || n[2] == 'I') &&
+		(n[3] == 'p' || n[3] == 'P');
+}
+#endif
+
 int is_game(const char *path, const char *n)
 {
 	int rc = 0;
@@ -98,6 +119,25 @@ int is_game(const char *path, const char *n)
 		return 0;
 	if (!strcmp("..", n) || !strcmp(".", n))
 		return 0;
+#ifdef _USE_UNPACK
+	if (has_zip_ext(n)) {
+		int is_zip = 0;
+		FILE *fd;
+		p = getfilepath(path, n);
+		if (!p)
+			return 0;
+		fd = fopen(dirpath(p), "rb"); /* verify PK zip signature */
+		if (fd) {
+			unsigned char sig[2];
+			if (fread(sig, 1, 2, fd) == 2 &&
+			    sig[0] == 'P' && sig[1] == 'K')
+				is_zip = 1;
+			fclose(fd);
+		}
+		free(p);
+		return is_zip ? GAME_ZIP : 0;
+	}
+#endif
 	p = getfilepath(path, n);
 	if (!p)
 		return 0;
@@ -196,6 +236,10 @@ int game_select(const char *name)
 	}
 	if (g) {
 		char *oldgame = curgame_dir;
+#ifdef _USE_UNPACK
+		if (g->zip && game_unzip(g)) /* extract on first select */
+			goto err;
+#endif
 		curgame_dir = g->dir;
 		instead_done();
 
@@ -361,6 +405,22 @@ static void game_free(struct game *g)
 
 static void game_info_fill(struct game *g)
 {
+#ifdef _USE_UNPACK
+	if (g->zip) { /* not opened yet: name it after the archive file */
+		char *n = strdup(g->dir);
+		if (n) {
+			size_t l = strlen(n);
+			if (l > 4) /* strip .zip */
+				n[l - 4] = 0;
+		}
+		g->name = n ? n : strdup(g->dir);
+		g->info = NULL;
+		g->author = NULL;
+		g->version = NULL;
+		g->direction = NULL;
+		return;
+	}
+#endif
 	g->name = game_name(dirpath(g->path), g->dir);
 	g->info = game_info(dirpath(g->path), g->dir);
 	g->author = game_author(dirpath(g->path), g->dir);
@@ -418,6 +478,13 @@ static int games_add(const char *path, const char *dir)
 	p = getfilepath(path, dir);
 	if (!p)
 		return -1;
+	games[games_nr].zip = 0;
+#ifdef _USE_UNPACK
+	if (has_zip_ext(dir)) { /* p is the archive file itself */
+		games[games_nr].idf = 0;
+		games[games_nr].zip = 1;
+	} else
+#endif
 	if (!idf_magic(p)) {
 		strcat(p, "/");
 		games[games_nr].idf = 0;
@@ -428,6 +495,54 @@ static int games_add(const char *path, const char *dir)
 	games_nr ++;
 	return 0;
 }
+
+#ifdef _USE_UNPACK
+/*
+ * Unpack a .zip game (listed but not yet extracted) into the local games
+ * dir, drop the archive, and turn the given slot into the real game in
+ * place. Returns 0 and leaves g pointing at the unpacked game, or -1.
+ */
+static int game_unzip(struct game *g)
+{
+	char *dst = game_local_games_path(1); /* writable games dir */
+	char *zip = g->path ? strdup(g->path) : NULL;
+	char *p;
+	if (!dst || !zip) {
+		free(zip);
+		return -1;
+	}
+	fprintf(stderr, "Unpacking: %s\n", zip);
+	if (unpack(zip, dst) || !zip_game_dirname[0]) {
+		fprintf(stderr, "Failed to unpack: %s\n", zip);
+		if (zip_game_dirname[0]) { /* clean partial extraction */
+			p = getfilepath(dst, zip_game_dirname);
+			if (p) {
+				remove_dir(p);
+				free(p);
+			}
+		}
+		free(zip);
+		return -1;
+	}
+	p = getfilepath(dst, zip_game_dirname);
+	if (!p) {
+		free(zip);
+		return -1;
+	}
+	game_free(g);
+	g->zip = 0;
+	if (!idf_magic(p)) {
+		strcat(p, "/");
+		g->idf = 0;
+	} else
+		g->idf = 1;
+	game_fill(g, p, zip_game_dirname);
+	unlink(zip); /* installed -> drop the archive */
+	free(p);
+	free(zip);
+	return 0;
+}
+#endif
 
 int games_replace(const char *path, const char *dir)
 {
@@ -446,6 +561,7 @@ int games_replace(const char *path, const char *dir)
 		if (!p)
 			return -1;
 		game_free(g);
+		g->zip = 0;
 		game_fill(g, p, dir);
 		free(p);
 		games_sort();

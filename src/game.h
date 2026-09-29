@@ -171,6 +171,7 @@ struct game {
 	char *direction;
 /*	char *api; */
 	int idf;
+	int zip; /* unopened .zip archive; unpacked lazily on select */
 };
 
 extern struct	game *games;
