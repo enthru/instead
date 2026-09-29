@@ -196,9 +196,12 @@ static SDL_GameController *gamepad = NULL;
 static int deadzone = 8192;
 static float gp_accum_x = 0.0f; /* sub-pixel pointer movement carry */
 static float gp_accum_y = 0.0f;
+static float gp_scroll_accum = 0.0f; /* right-stick scroll carry (in notches) */
 
 const float MOUSE_SHIFT_MIN = 0.0;
 const float MOUSE_SHIFT_MAX = 6.0;
+/* Max wheel notches per tick at full right-stick deflection. */
+const float SCROLL_SHIFT_MAX = 0.4;
 
 static int gamepad_deadzone(SDL_GameController *g)
 {
@@ -236,6 +239,29 @@ static float gamepad_mouse_shift(int axis_value) {
 	 * travel towards the edge. Combined with fractional accumulation in
 	 * gamepad_timer_fn this gives smooth, precise pointer control. */
 	return sign * (MOUSE_SHIFT_MIN + (MOUSE_SHIFT_MAX - MOUSE_SHIFT_MIN) * t * t);
+}
+
+/* Per-tick scroll speed for the right stick. Same quadratic response as the
+ * pointer: fine control near the centre, faster towards the edge. */
+static float gamepad_scroll_shift(int axis_value) {
+	float t, range, sign;
+	if (abs(axis_value) < deadzone)
+		return 0;
+	range = 32768.0 - deadzone;
+	sign = (axis_value > 0) ? 1.0f : -1.0f;
+	t = (abs(axis_value) - deadzone) / range; /* 0..1 */
+	return sign * SCROLL_SHIFT_MAX * t * t;
+}
+
+/* Queue one mouse-wheel notch (y > 0 scrolls up). Runs on the timer thread,
+ * so we only push an event, as gamepad_check_triggers() does. */
+static void gamepad_push_wheel(int y)
+{
+	SDL_Event event;
+	memset(&event, 0, sizeof(event));
+	event.type = SDL_MOUSEWHEEL;
+	event.wheel.y = y;
+	SDL_PushEvent(&event);
 }
 
 static void gamepad_init(void)
@@ -295,20 +321,33 @@ static void gamepad_check_triggers(void)
 static int gamepad_timer_fn(int interval, void *p)
 {
 	SDL_Event event;
-	int axis_x = 0, axis_y = 0;
+	int axis_x = 0, axis_y = 0, scroll_y = 0;
 
 	if (!gamepad)
 		return interval;
 
 	gamepad_check_triggers();
 
-	axis_x = SDL_GameControllerGetAxis(gamepad, SDL_CONTROLLER_AXIS_RIGHTX);
-	axis_y = SDL_GameControllerGetAxis(gamepad, SDL_CONTROLLER_AXIS_RIGHTY);
-
-	if (abs(axis_x) <= deadzone && abs(axis_y) <= deadzone) {
-		axis_x = SDL_GameControllerGetAxis(gamepad, SDL_CONTROLLER_AXIS_LEFTX);
-		axis_y = SDL_GameControllerGetAxis(gamepad, SDL_CONTROLLER_AXIS_LEFTY);
+	/* Right stick scrolls the text window (via mouse-wheel events). A
+	 * positive stick Y means "down", which is a wheel-down notch. */
+	scroll_y = SDL_GameControllerGetAxis(gamepad, SDL_CONTROLLER_AXIS_RIGHTY);
+	if (abs(scroll_y) > deadzone) {
+		gp_scroll_accum += gamepad_scroll_shift(scroll_y);
+		while (gp_scroll_accum >= 1.0f) {
+			gamepad_push_wheel(-1); /* scroll down */
+			gp_scroll_accum -= 1.0f;
+		}
+		while (gp_scroll_accum <= -1.0f) {
+			gamepad_push_wheel(1); /* scroll up */
+			gp_scroll_accum += 1.0f;
+		}
+	} else {
+		gp_scroll_accum = 0;
 	}
+
+	/* Left stick moves the pointer. */
+	axis_x = SDL_GameControllerGetAxis(gamepad, SDL_CONTROLLER_AXIS_LEFTX);
+	axis_y = SDL_GameControllerGetAxis(gamepad, SDL_CONTROLLER_AXIS_LEFTY);
 
 	if (abs(axis_x) > deadzone || abs(axis_y) > deadzone) {
 		int dx, dy, cx = 0, cy = 0;
