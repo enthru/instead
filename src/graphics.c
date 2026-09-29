@@ -2199,8 +2199,16 @@ int gfx_set_mode(int w, int h, int fs)
 		fprintf(stderr, "Unable to set display mode: %s\n", SDL_GetError());
 		/* return -1; */
 	}
+#ifndef __vita__
 	if (!vsync_sw)
 		vsync = 0;
+#else
+	/* Vita: keep PRESENTVSYNC on so frame presents are paced to the 60Hz
+	 * panel. Without it the accelerated renderer presents on every event,
+	 * which makes pointer/scroll motion look choppy even at a high frame
+	 * rate. */
+	vsync = SDL_RENDERER_PRESENTVSYNC;
+#endif
 retry:
 	if (software_sw ||
 		(!(Renderer = SDL_CreateRenderer(SDL_VideoWindow, -1,
@@ -2432,6 +2440,21 @@ int SDL_Flip(SDL_Surface * screen)
 		SDL_UpdateTexture(SDL_VideoTexture, &rect, pixels, pitch);
 		gfx_render_copy(SDL_VideoTexture, &rect, 1);
 		SDL_RenderPresent(Renderer);
+#ifdef __vita__
+		{ /* rough FPS meter: presents per second, logged to stderr */
+			static Uint32 fps_t0 = 0;
+			static int fps_n = 0;
+			Uint32 now = SDL_GetTicks();
+			if (!fps_t0)
+				fps_t0 = now;
+			fps_n++;
+			if (now - fps_t0 >= 1000) {
+				fprintf(stderr, "FPS: %d\n", fps_n);
+				fps_n = 0;
+				fps_t0 = now;
+			}
+		}
+#endif
 	}
 	queue_x1 = queue_y1 = queue_x2 = queue_y2 = -1;
 	queue_dirty = 0;
