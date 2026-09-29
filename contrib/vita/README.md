@@ -64,3 +64,14 @@ hardware or Vita3K** yet. Expect to iterate on:
 - Rendering scale/DPI for the 960×544 screen (the `mobile`/`wide` themes are the
   likely candidates for the default).
 - A proper LiveArea (background/startup image) is not included — only `icon0.png`.
+
+## Note on the icon
+
+`contrib/vita/icon0.png` is an 8-bit *palette* PNG (run through `pngquant`).
+The Vita package installer rejects a plain RGBA icon with
+`0x8010113D` at the end of the install, so if you regenerate the icon, quantise
+it again:
+
+```sh
+pngquant --force --output contrib/vita/icon0.png 256 source-128x128.png
+```
