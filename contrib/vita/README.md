@@ -34,7 +34,8 @@ molecularShell). It appears on the LiveArea as **INSTEAD** (title id
 - Read-only data (the STEAD engine, themes, language files, the bundled
   tutorial game and the icon) is packed into the vpk and lives under `app0:/`.
 - Saves and the config file go to `ux0:data/instead/` on the memory card.
-- Extra games can be dropped into `ux0:data/instead/games/<game>/`.
+- Extra games go into `ux0:data/instead/games/`, as folders, `.idf` files or
+  `.zip` archives. See [Adding games](../../README.md#adding-games).
 
 ## What was ported
 
@@ -55,12 +56,12 @@ molecularShell). It appears on the LiveArea as **INSTEAD** (title id
 
 ## Status / known limitations
 
-The package builds and links cleanly, but has **not been verified on real
-hardware or Vita3K** yet. Expect to iterate on:
+The port runs on real hardware. The front touchscreen acts as the mouse, the
+left stick moves the pointer, the right stick scrolls the text window, and START
+opens the menu. Known gaps:
 
-- Input: the front touchscreen maps to the SDL mouse, which is enough to click
-  links, but there is no on-screen (IME) keyboard or gamepad mapping yet, so
-  games needing text input or comfortable navigation are not playable.
+- Text input: there is no tested on-screen (IME) keyboard, so games that need
+  typed text may not be playable.
 - Rendering scale/DPI for the 960×544 screen (the `mobile`/`wide` themes are the
   likely candidates for the default).
 - A proper LiveArea (background/startup image) is not included — only `icon0.png`.
